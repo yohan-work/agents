@@ -4,34 +4,25 @@ export async function POST(req: Request) {
     try {
         const { messages, agent } = await req.json();
 
-        const lastUserMessage = messages.filter((m: any) => m.senderId === 'user').pop();
-        const userContent = lastUserMessage ? lastUserMessage.content : '';
+        const history = messages.map((m: any) => ({
+            role: m.senderId === 'user' ? 'user' : 'assistant',
+            content: m.content
+        }));
 
-        if (!userContent) {
-            return NextResponse.json({ error: 'No user message found' }, { status: 400 });
-        }
+        const systemMessage = {
+            role: 'system',
+            content: `${agent.systemPrompt}
+
+IMPORTANT INSTRUCTIONS:
+1. **Language**: You must speak ONLY in **Korean (한국어)**.
+2. **Length**: Keep your response concise (under 2-3 sentences), unless a detailed report is requested.
+3. **Context**: You are currently in a meeting with the Chairman (User). React to the previous messages naturally.
+4. **Consistency**: Never break character. Maintain your specific tone defined in the prompts above.`
+        };
 
         const payload = {
             model: 'llama3:latest',
-            messages: [
-                {
-                    role: 'system',
-                    content: `You are a Korean employee in a company simulation. 
-Name: ${agent.name}
-Rank: ${agent.rank}
-Personality: ${agent.personality}
-
-CORE INSTRUCTIONS:
-1. **SPEAK KOREAN ONLY.** (절대로 영어를 쓰지 마시오. 무조건 한국어로만 답하시오.)
-2. Your response must be in Korean language (Hangul).
-3. Act according to your system prompt: ${agent.systemPrompt}
-4. Keep it brief (under 3 sentences).`
-                },
-                {
-                    role: 'user',
-                    content: `${userContent} (반드시 한국어로 대답해)`
-                }
-            ],
+            messages: [systemMessage, ...history],
             stream: false
         };
 
