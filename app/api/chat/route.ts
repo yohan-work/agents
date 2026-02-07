@@ -1,15 +1,26 @@
 import { NextResponse } from 'next/server';
+import { ChatMessage, EmployeeAgent } from '@/app/types/agent';
+
+interface ChatRequestBody {
+    messages: ChatMessage[];
+    agent: EmployeeAgent;
+}
+
+interface OllamaMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+}
 
 export async function POST(req: Request) {
     try {
-        const { messages, agent } = await req.json();
+        const { messages, agent }: ChatRequestBody = await req.json();
 
-        const history = messages.map((m: any) => ({
-            role: m.senderId === 'user' ? 'user' : 'assistant',
+        const history: OllamaMessage[] = messages.map((m) => ({
+            role: m.senderId === 'user' ? 'user' as const : 'assistant' as const,
             content: m.content
         }));
 
-        const systemMessage = {
+        const systemMessage: OllamaMessage = {
             role: 'system',
             content: `${agent.systemPrompt}
 
@@ -55,20 +66,23 @@ IMPORTANT INSTRUCTIONS:
 
             return NextResponse.json({ content: agentResponse });
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             clearTimeout(timeoutId);
             console.error('[API] Error in chat API:', error);
 
-            if (error.name === 'AbortError') {
+            const err = error instanceof Error ? error : new Error('Unknown error');
+
+            if (err.name === 'AbortError') {
                 return NextResponse.json({ error: 'Ollama request timed out (60s). Model might be loading.' }, { status: 504 });
             }
 
             // Handle fetch connection errors (e.g., Ollama not running)
-            if (error.cause && (error.cause as any).code === 'ECONNREFUSED') {
+            const cause = err.cause as Record<string, unknown> | undefined;
+            if (cause && cause.code === 'ECONNREFUSED') {
                 return NextResponse.json({ error: 'Ollama is not running (Connection Refused).' }, { status: 503 });
             }
 
-            return NextResponse.json({ error: `Internal Server Error: ${error.message}` }, { status: 500 });
+            return NextResponse.json({ error: `Internal Server Error: ${err.message}` }, { status: 500 });
         }
 
     } catch (error) {
