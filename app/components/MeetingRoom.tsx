@@ -88,18 +88,44 @@ export default function MeetingRoom() {
                     throw new Error(errorData.error || 'API request failed');
                 }
 
-                const data = await response.json();
+                const msgId = `${Date.now()}-${i}`;
+                const msgTimestamp = Date.now();
+
+                setMessages((prev) => [...prev, {
+                    id: msgId,
+                    senderId: agent.id,
+                    content: '',
+                    timestamp: msgTimestamp,
+                }]);
+                setSpeakingAgentId(null);
+
+                const reader = response.body?.getReader();
+                if (!reader) throw new Error('No response stream available');
+
+                const decoder = new TextDecoder();
+                let fullContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    fullContent += decoder.decode(value, { stream: true });
+                    const currentContent = fullContent;
+                    setMessages((prev) =>
+                        prev.map((m) =>
+                            m.id === msgId ? { ...m, content: currentContent } : m
+                        )
+                    );
+                }
 
                 const agentMsg: ChatMessage = {
-                    id: `${Date.now()}-${i}`,
+                    id: msgId,
                     senderId: agent.id,
-                    content: data.content,
-                    timestamp: Date.now(),
+                    content: fullContent,
+                    timestamp: msgTimestamp,
                 };
 
-                // Add to accumulated messages for next agent's context
                 accumulatedMessages = [...accumulatedMessages, agentMsg];
-                setMessages((prev) => [...prev, agentMsg]);
 
             } catch (error: unknown) {
                 const err = error instanceof Error ? error : new Error('Unknown error');
