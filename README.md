@@ -2,7 +2,7 @@
 
 AI 에이전트 기반 가상 회사 시뮬레이션입니다. 한국 기업의 직급 체계를 가진 9명의 AI 직원이 배치된 가상 회의실에서, 사용자가 직원들과 실시간으로 대화할 수 있는 인터랙티브 환경을 제공합니다. 각 에이전트는 고유한 직급, 성격, 업무 스타일, 한국어 경어 말투 규칙을 가지고 있으며 Ollama로 구동되는 로컬 LLM을 통해 응답합니다.
 
-<img width="1697" height="869" alt="image" src="https://github.com/user-attachments/assets/e28b9532-609a-456f-8db7-a4e106d65a63" />
+<img width="1465" height="875" alt="pj-boardroom" src="https://github.com/user-attachments/assets/d9369322-12a3-4ec7-b16f-f144886edc6b" />
 
 ---
 
