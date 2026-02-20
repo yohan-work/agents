@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { agents } from '@/app/data/agents';
 import { EmployeeAgent, ChatMessage, AgentStance, DiscussionState } from '@/app/types/agent';
 import { useDiscussion } from '@/app/hooks/useDiscussion';
 import { cn } from '@/app/lib/utils';
+import SpeechBubble from './SpeechBubble';
+import AgentProfileCard from './AgentProfileCard';
+import ConnectionLines from './ConnectionLine';
 import {
     Send,
     User,
@@ -16,6 +19,12 @@ import {
     Swords,
     Square,
 } from 'lucide-react';
+
+interface LatestMessageInfo {
+    content: string;
+    stance?: AgentStance;
+    isStreaming: boolean;
+}
 
 const STANCE_CONFIG: Record<AgentStance, { label: string; color: string; bg: string; border: string }> = {
     agree: { label: '찬성', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
@@ -32,6 +41,7 @@ export default function MeetingRoom() {
     const [targetAgent, setTargetAgent] = useState<EmployeeAgent | null>(null);
     const [mobileView, setMobileView] = useState<'chat' | 'boardroom'>('chat');
     const [isDiscussMode, setIsDiscussMode] = useState(false);
+    const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     const onDiscussionMessageAdd = useCallback((msg: ChatMessage) => {
@@ -55,6 +65,29 @@ export default function MeetingRoom() {
 
     const speakingAgentId = isDiscussMode ? discussSpeakingAgentId : chatSpeakingAgentId;
     const isBusy = isProcessing || discussion.status === 'in_progress';
+
+    const lastAgentMsgIndex = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].senderId !== 'user' && messages[i].senderId !== 'system') return i;
+        }
+        return -1;
+    }, [messages]);
+
+    const latestAgentMessages = useMemo(() => {
+        const result: Record<string, LatestMessageInfo> = {};
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i];
+            if (msg.senderId === 'user' || msg.senderId === 'system') continue;
+            if (result[msg.senderId]) continue;
+            const isActiveMessage = i === lastAgentMsgIndex && isBusy && msg.content.length > 0 && !msg.stance;
+            result[msg.senderId] = {
+                content: msg.content,
+                stance: msg.stance,
+                isStreaming: isActiveMessage,
+            };
+        }
+        return result;
+    }, [messages, lastAgentMsgIndex, isBusy]);
 
     const scrollToBottom = useCallback(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -237,6 +270,8 @@ export default function MeetingRoom() {
                     </AnimatePresence>
 
                     <div className="w-[90%] md:w-[80%] h-[55%] md:h-[60%] bg-white rounded-[30px] md:rounded-[40px] shadow-xl border border-slate-200 relative flex items-center justify-center">
+                        <ConnectionLines messages={messages} isActive={isBusy || discussion.status === 'completed'} />
+
                         <div className="text-slate-300 font-bold text-2xl md:text-4xl opacity-20 tracking-widest uppercase">
                             Company
                         </div>
@@ -260,6 +295,9 @@ export default function MeetingRoom() {
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
                                     discussion={discussion}
+                                    latestMessage={latestAgentMessages[agent.id]}
+                                    isHovered={hoveredAgentId === agent.id}
+                                    onHover={setHoveredAgentId}
                                 />
                             ))}
                         </div>
@@ -274,6 +312,9 @@ export default function MeetingRoom() {
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
                                     discussion={discussion}
+                                    latestMessage={latestAgentMessages[agent.id]}
+                                    isHovered={hoveredAgentId === agent.id}
+                                    onHover={setHoveredAgentId}
                                 />
                             ))}
                         </div>
@@ -288,6 +329,9 @@ export default function MeetingRoom() {
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
                                     discussion={discussion}
+                                    latestMessage={latestAgentMessages[agent.id]}
+                                    isHovered={hoveredAgentId === agent.id}
+                                    onHover={setHoveredAgentId}
                                 />
                             ))}
                         </div>
@@ -495,9 +539,15 @@ interface AgentAvatarProps {
     isSelected: boolean;
     onClick: () => void;
     discussion: DiscussionState;
+    latestMessage?: LatestMessageInfo;
+    isHovered: boolean;
+    onHover: (agentId: string | null) => void;
 }
 
-function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discussion }: AgentAvatarProps) {
+function AgentAvatar({
+    agent, position, isSpeaking, isSelected, onClick,
+    discussion, latestMessage, isHovered, onHover,
+}: AgentAvatarProps) {
     const labelClass = position === 'top'
         ? 'top-full mt-2'
         : position === 'left'
@@ -509,10 +559,14 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discuss
     const hasSpoken = agentStance !== undefined;
     const isWaiting = isInDiscussion && !hasSpoken && !isSpeaking;
 
+    const showSpeechBubble = latestMessage?.isStreaming && latestMessage.content.length > 0;
+
     return (
         <div
             className="relative group flex flex-col items-center justify-center"
             onClick={onClick}
+            onMouseEnter={() => onHover(agent.id)}
+            onMouseLeave={() => onHover(null)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
@@ -560,6 +614,7 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discuss
                 </div>
             </motion.div>
 
+            {/* Name Tag */}
             <div className={cn(
                 "absolute whitespace-nowrap bg-white px-2 md:px-3 py-0.5 md:py-1 rounded-md shadow-sm border border-slate-100 flex flex-col items-center z-10",
                 position === 'left' || position === 'right' ? 'top-1/2 -translate-y-1/2' : '',
@@ -571,6 +626,7 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discuss
                 <span className="text-[9px] md:text-[10px] text-slate-400">{agent.role}</span>
             </div>
 
+            {/* Selection indicator */}
             {isSelected && (
                 <motion.div
                     initial={{ scale: 0 }}
@@ -583,7 +639,7 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discuss
                 </motion.div>
             )}
 
-            {/* Stance indicator during discussion */}
+            {/* Stance indicator */}
             <AnimatePresence>
                 {agentStance && (
                     <motion.div
@@ -603,6 +659,30 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discuss
                         {agentStance === 'neutral' && '-'}
                         {agentStance === 'cautious' && '!'}
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Speech Bubble */}
+            <AnimatePresence>
+                {showSpeechBubble && latestMessage && (
+                    <SpeechBubble
+                        content={latestMessage.content}
+                        stance={latestMessage.stance}
+                        position={position}
+                        isStreaming={latestMessage.isStreaming}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Profile Card on hover */}
+            <AnimatePresence>
+                {isHovered && !isSpeaking && !showSpeechBubble && (
+                    <AgentProfileCard
+                        agent={agent}
+                        position={position}
+                        stance={agentStance}
+                        latestMessage={latestMessage?.content}
+                    />
                 )}
             </AnimatePresence>
         </div>
