@@ -5,11 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { agents } from '@/app/data/agents';
 import { EmployeeAgent, ChatMessage, AgentStance, DiscussionState } from '@/app/types/agent';
 import { useDiscussion } from '@/app/hooks/useDiscussion';
+import { useDebateArena } from '@/app/hooks/useDebateArena';
 import { cn } from '@/app/lib/utils';
 import SpeechBubble from './SpeechBubble';
 import AgentProfileCard from './AgentProfileCard';
 import ConnectionLines from './ConnectionLine';
 import DiscussionSummary from './DiscussionSummary';
+import DebateArena from './DebateArena';
 import {
     Send,
     User,
@@ -19,6 +21,7 @@ import {
     AlertTriangle,
     Swords,
     Square,
+    Zap,
 } from 'lucide-react';
 
 interface LatestMessageInfo {
@@ -65,8 +68,21 @@ export default function MeetingRoom() {
         speakingAgentId: discussSpeakingAgentId,
     } = useDiscussion(onDiscussionMessageAdd, onDiscussionMessageUpdate);
 
+    const {
+        arena,
+        openArena,
+        closeArena,
+        selectAgent: arenaSelectAgent,
+        deselectAgent: arenaDeselectAgent,
+        setTotalRounds,
+        startDebate,
+        cancelDebate,
+        confirmAgents,
+    } = useDebateArena();
+
+    const isArenaActive = arena.phase !== 'idle';
     const speakingAgentId = isDiscussMode ? discussSpeakingAgentId : chatSpeakingAgentId;
-    const isBusy = isProcessing || discussion.status === 'in_progress';
+    const isBusy = isProcessing || discussion.status === 'in_progress' || isArenaActive;
 
     const lastAgentMsgIndex = useMemo(() => {
         for (let i = messages.length - 1; i >= 0; i--) {
@@ -276,6 +292,22 @@ export default function MeetingRoom() {
                         )}
                     </AnimatePresence>
 
+                    {/* Debate Arena overlay */}
+                    <AnimatePresence>
+                        {isArenaActive && (
+                            <DebateArena
+                                arena={arena}
+                                onClose={closeArena}
+                                onSelectAgent={arenaSelectAgent}
+                                onDeselectAgent={arenaDeselectAgent}
+                                onConfirmAgents={confirmAgents}
+                                onSetRounds={setTotalRounds}
+                                onStartDebate={startDebate}
+                                onCancel={cancelDebate}
+                            />
+                        )}
+                    </AnimatePresence>
+
                     <div className="w-[90%] md:w-[80%] h-[55%] md:h-[60%] bg-white rounded-[30px] md:rounded-[40px] shadow-xl border border-slate-200 relative flex items-center justify-center">
                         <ConnectionLines messages={messages} isActive={isBusy || discussion.status === 'completed'} />
 
@@ -480,6 +512,26 @@ export default function MeetingRoom() {
                             >
                                 <Swords className="w-3.5 h-3.5" />
                                 <span>토론 모드</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    if (!isBusy) {
+                                        openArena();
+                                        setMobileView('boardroom');
+                                    }
+                                }}
+                                disabled={isBusy}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                                    isArenaActive
+                                        ? "bg-red-100 border-red-300 text-red-700"
+                                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100",
+                                    isBusy && !isArenaActive && "opacity-50 cursor-not-allowed"
+                                )}
+                            >
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>대결 모드</span>
                             </button>
 
                             {discussion.status === 'in_progress' && (
