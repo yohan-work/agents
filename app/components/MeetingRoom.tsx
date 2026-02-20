@@ -9,6 +9,7 @@ import { cn } from '@/app/lib/utils';
 import SpeechBubble from './SpeechBubble';
 import AgentProfileCard from './AgentProfileCard';
 import ConnectionLines from './ConnectionLine';
+import DiscussionSummary from './DiscussionSummary';
 import {
     Send,
     User,
@@ -42,6 +43,7 @@ export default function MeetingRoom() {
     const [mobileView, setMobileView] = useState<'chat' | 'boardroom'>('chat');
     const [isDiscussMode, setIsDiscussMode] = useState(false);
     const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
+    const [showSummary, setShowSummary] = useState(true);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     const onDiscussionMessageAdd = useCallback((msg: ChatMessage) => {
@@ -110,6 +112,7 @@ export default function MeetingRoom() {
         setMobileView('chat');
 
         if (isDiscussMode) {
+            setShowSummary(true);
             const topicMsg: ChatMessage = {
                 id: `topic-${Date.now()}`,
                 senderId: 'user',
@@ -259,13 +262,17 @@ export default function MeetingRoom() {
                     "hidden md:flex md:w-2/3",
                     mobileView === 'boardroom' ? "flex w-full" : ""
                 )}>
-                    {/* Discussion progress overlay */}
+                    {/* Discussion progress / summary overlay */}
                     <AnimatePresence>
                         {discussion.status === 'in_progress' && (
                             <DiscussionProgress discussion={discussion} />
                         )}
-                        {discussion.status === 'completed' && (
-                            <DiscussionStanceSummary discussion={discussion} />
+                        {discussion.status === 'completed' && showSummary && (
+                            <DiscussionSummary
+                                discussion={discussion}
+                                messages={messages}
+                                onClose={() => setShowSummary(false)}
+                            />
                         )}
                     </AnimatePresence>
 
@@ -725,44 +732,6 @@ function DiscussionProgress({ discussion }: { discussion: DiscussionState }) {
                     발언자: {currentAgent.name} {currentAgent.rank}
                 </div>
             )}
-        </motion.div>
-    );
-}
-
-function DiscussionStanceSummary({ discussion }: { discussion: DiscussionState }) {
-    const stanceEntries = Object.entries(discussion.stances);
-    const counts = { agree: 0, disagree: 0, neutral: 0, cautious: 0 };
-    stanceEntries.forEach(([, stance]) => { counts[stance]++; });
-    const total = stanceEntries.length;
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200 px-5 py-3 max-w-sm w-[90%]"
-        >
-            <div className="text-xs font-bold text-slate-700 mb-2">토론 결과</div>
-            <div className="text-[11px] text-slate-500 truncate mb-3">
-                안건: {discussion.topic}
-            </div>
-            <div className="flex gap-2">
-                {(Object.entries(counts) as [AgentStance, number][])
-                    .filter(([, count]) => count > 0)
-                    .map(([stance, count]) => {
-                        const config = STANCE_CONFIG[stance];
-                        const pct = Math.round((count / total) * 100);
-                        return (
-                            <div key={stance} className={cn(
-                                "flex-1 rounded-lg border px-2 py-1.5 text-center",
-                                config.bg, config.border
-                            )}>
-                                <div className={cn("text-sm font-bold", config.color)}>{count}</div>
-                                <div className={cn("text-[10px] font-medium", config.color)}>{config.label} ({pct}%)</div>
-                            </div>
-                        );
-                    })}
-            </div>
         </motion.div>
     );
 }
