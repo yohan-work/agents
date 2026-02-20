@@ -3,18 +3,58 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { agents } from '@/app/data/agents';
-import { EmployeeAgent, ChatMessage } from '@/app/types/agent';
+import { EmployeeAgent, ChatMessage, AgentStance, DiscussionState } from '@/app/types/agent';
+import { useDiscussion } from '@/app/hooks/useDiscussion';
 import { cn } from '@/app/lib/utils';
-import { Send, User, X, Users, MessageSquare, AlertTriangle } from 'lucide-react';
+import {
+    Send,
+    User,
+    X,
+    Users,
+    MessageSquare,
+    AlertTriangle,
+    Swords,
+    Square,
+} from 'lucide-react';
+
+const STANCE_CONFIG: Record<AgentStance, { label: string; color: string; bg: string; border: string }> = {
+    agree: { label: '찬성', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+    disagree: { label: '반대', color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200' },
+    neutral: { label: '중립', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
+    cautious: { label: '신중', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' },
+};
 
 export default function MeetingRoom() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [speakingAgentId, setSpeakingAgentId] = useState<string | null>(null);
+    const [chatSpeakingAgentId, setChatSpeakingAgentId] = useState<string | null>(null);
     const [targetAgent, setTargetAgent] = useState<EmployeeAgent | null>(null);
     const [mobileView, setMobileView] = useState<'chat' | 'boardroom'>('chat');
+    const [isDiscussMode, setIsDiscussMode] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    const onDiscussionMessageAdd = useCallback((msg: ChatMessage) => {
+        setMessages((prev) => [...prev, msg]);
+    }, []);
+
+    const onDiscussionMessageUpdate = useCallback((id: string, content: string, stance?: AgentStance) => {
+        setMessages((prev) =>
+            prev.map((m) =>
+                m.id === id ? { ...m, content, ...(stance !== undefined ? { stance } : {}) } : m
+            )
+        );
+    }, []);
+
+    const {
+        discussion,
+        startDiscussion,
+        cancelDiscussion,
+        speakingAgentId: discussSpeakingAgentId,
+    } = useDiscussion(onDiscussionMessageAdd, onDiscussionMessageUpdate);
+
+    const speakingAgentId = isDiscussMode ? discussSpeakingAgentId : chatSpeakingAgentId;
+    const isBusy = isProcessing || discussion.status === 'in_progress';
 
     const scrollToBottom = useCallback(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,33 +65,40 @@ export default function MeetingRoom() {
     }, [messages, scrollToBottom]);
 
     const handleAgentClick = (agent: EmployeeAgent) => {
-        if (isProcessing) return;
+        if (isBusy || isDiscussMode) return;
         setTargetAgent((prev) => (prev?.id === agent.id ? null : agent));
     };
 
     const handleSendMessage = async () => {
-        if (!input.trim() || isProcessing) return;
+        if (!input.trim() || isBusy) return;
 
-        const userMsg: ChatMessage = {
-            id: Date.now().toString(),
-            senderId: 'user',
-            content: input,
-            timestamp: Date.now(),
-        };
-
-        setMessages((prev) => [...prev, userMsg]);
         const currentInput = input;
         setInput('');
-        setIsProcessing(true);
-
-        // Switch to chat view on mobile when sending
         setMobileView('chat');
 
-        await generateResponses(currentInput, userMsg);
+        if (isDiscussMode) {
+            const topicMsg: ChatMessage = {
+                id: `topic-${Date.now()}`,
+                senderId: 'user',
+                content: currentInput,
+                timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, topicMsg]);
+            await startDiscussion(currentInput);
+        } else {
+            const userMsg: ChatMessage = {
+                id: Date.now().toString(),
+                senderId: 'user',
+                content: currentInput,
+                timestamp: Date.now(),
+            };
+            setMessages((prev) => [...prev, userMsg]);
+            setIsProcessing(true);
+            await generateChatResponses(currentInput, userMsg);
+        }
     };
 
-    const generateResponses = async (userInput: string, userMsg: ChatMessage) => {
-        // Determine speakers: targeted agent or random 2-3
+    const generateChatResponses = async (userInput: string, userMsg: ChatMessage) => {
         let speakers: EmployeeAgent[];
         if (targetAgent) {
             speakers = [targetAgent];
@@ -61,26 +108,18 @@ export default function MeetingRoom() {
             speakers = shuffled.slice(0, 2 + Math.floor(Math.random() * 2));
         }
 
-        // Build accumulated messages for context continuity within the round
         let accumulatedMessages: ChatMessage[] = [...messages, userMsg];
 
         for (let i = 0; i < speakers.length; i++) {
             const agent = speakers[i];
-
-            // Set speaking agent for UI highlight
-            setSpeakingAgentId(agent.id);
-
-            // Natural delay between speakers
-            await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+            setChatSpeakingAgentId(agent.id);
+            await new Promise((resolve) => setTimeout(resolve, 800 + Math.random() * 1200));
 
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: accumulatedMessages,
-                        agent: agent
-                    })
+                    body: JSON.stringify({ messages: accumulatedMessages, agent }),
                 });
 
                 if (!response.ok) {
@@ -92,12 +131,9 @@ export default function MeetingRoom() {
                 const msgTimestamp = Date.now();
 
                 setMessages((prev) => [...prev, {
-                    id: msgId,
-                    senderId: agent.id,
-                    content: '',
-                    timestamp: msgTimestamp,
+                    id: msgId, senderId: agent.id, content: '', timestamp: msgTimestamp,
                 }]);
-                setSpeakingAgentId(null);
+                setChatSpeakingAgentId(null);
 
                 const reader = response.body?.getReader();
                 if (!reader) throw new Error('No response stream available');
@@ -108,41 +144,30 @@ export default function MeetingRoom() {
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-
                     fullContent += decoder.decode(value, { stream: true });
                     const currentContent = fullContent;
                     setMessages((prev) =>
-                        prev.map((m) =>
-                            m.id === msgId ? { ...m, content: currentContent } : m
-                        )
+                        prev.map((m) => m.id === msgId ? { ...m, content: currentContent } : m)
                     );
                 }
 
-                const agentMsg: ChatMessage = {
-                    id: msgId,
-                    senderId: agent.id,
-                    content: fullContent,
-                    timestamp: msgTimestamp,
-                };
-
-                accumulatedMessages = [...accumulatedMessages, agentMsg];
+                accumulatedMessages = [...accumulatedMessages, {
+                    id: msgId, senderId: agent.id, content: fullContent, timestamp: msgTimestamp,
+                }];
 
             } catch (error: unknown) {
                 const err = error instanceof Error ? error : new Error('Unknown error');
                 console.error('Failed to get response for agent', agent.name, err);
-
                 const errorMsg: ChatMessage = {
-                    id: `${Date.now()}-err-${i}`,
-                    senderId: 'system',
-                    content: `${agent.name}: ${err.message || '응답 실패'}`,
-                    timestamp: Date.now(),
+                    id: `${Date.now()}-err-${i}`, senderId: 'system',
+                    content: `${agent.name}: ${err.message || '응답 실패'}`, timestamp: Date.now(),
                 };
                 accumulatedMessages = [...accumulatedMessages, errorMsg];
                 setMessages((prev) => [...prev, errorMsg]);
             }
         }
 
-        setSpeakingAgentId(null);
+        setChatSpeakingAgentId(null);
         setIsProcessing(false);
     };
 
@@ -153,17 +178,21 @@ export default function MeetingRoom() {
         }
     };
 
-    const inputPlaceholder = targetAgent
-        ? `${targetAgent.name} ${targetAgent.rank}에게 질문...`
-        : '안건을 제시하거나 의견을 물어보세요...';
+    const handleCancelDiscussion = () => {
+        cancelDiscussion();
+    };
+
+    const inputPlaceholder = isDiscussMode
+        ? '전원 토론할 안건을 제시하세요...'
+        : targetAgent
+            ? `${targetAgent.name} ${targetAgent.rank}에게 질문...`
+            : '안건을 제시하거나 의견을 물어보세요...';
 
     return (
         <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans">
-            {/* Header */}
             <header className="px-4 md:px-6 py-3 md:py-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm">
                 <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">Boardroom AI</h1>
                 <div className="flex items-center gap-3">
-                    {/* Mobile view toggle */}
                     <div className="flex md:hidden gap-1 bg-slate-100 rounded-lg p-0.5">
                         <button
                             onClick={() => setMobileView('boardroom')}
@@ -191,21 +220,27 @@ export default function MeetingRoom() {
             </header>
 
             <main className="flex-1 flex overflow-hidden relative">
-                {/* Left Panel: Participants (Visual Board) */}
+                {/* Left Panel: Boardroom */}
                 <div className={cn(
                     "bg-slate-100 p-4 md:p-8 flex-col items-center justify-center relative overflow-hidden",
-                    // Desktop: always show as 2/3
                     "hidden md:flex md:w-2/3",
-                    // Mobile: show only when boardroom view is active
                     mobileView === 'boardroom' ? "flex w-full" : ""
                 )}>
-                    {/* Table */}
+                    {/* Discussion progress overlay */}
+                    <AnimatePresence>
+                        {discussion.status === 'in_progress' && (
+                            <DiscussionProgress discussion={discussion} />
+                        )}
+                        {discussion.status === 'completed' && (
+                            <DiscussionStanceSummary discussion={discussion} />
+                        )}
+                    </AnimatePresence>
+
                     <div className="w-[90%] md:w-[80%] h-[55%] md:h-[60%] bg-white rounded-[30px] md:rounded-[40px] shadow-xl border border-slate-200 relative flex items-center justify-center">
                         <div className="text-slate-300 font-bold text-2xl md:text-4xl opacity-20 tracking-widest uppercase">
                             Company
                         </div>
 
-                        {/* Chairman (User) Position - Bottom */}
                         <div className="absolute -bottom-14 md:-bottom-16 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
                             <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-slate-900 border-4 border-white shadow-lg flex items-center justify-center z-10">
                                 <User className="text-white w-7 h-7 md:w-10 md:h-10" />
@@ -215,7 +250,6 @@ export default function MeetingRoom() {
                             </div>
                         </div>
 
-                        {/* Top Row (Executives) */}
                         <div className="absolute -top-10 md:-top-12 left-0 w-full flex justify-center gap-8 md:gap-16">
                             {agents.slice(0, 3).map((agent) => (
                                 <AgentAvatar
@@ -225,11 +259,11 @@ export default function MeetingRoom() {
                                     isSpeaking={speakingAgentId === agent.id}
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
+                                    discussion={discussion}
                                 />
                             ))}
                         </div>
 
-                        {/* Left Column (Middle Management) */}
                         <div className="absolute top-1/2 -left-10 md:-left-12 transform -translate-y-1/2 flex flex-col gap-8 md:gap-12">
                             {agents.slice(3, 6).map((agent) => (
                                 <AgentAvatar
@@ -239,11 +273,11 @@ export default function MeetingRoom() {
                                     isSpeaking={speakingAgentId === agent.id}
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
+                                    discussion={discussion}
                                 />
                             ))}
                         </div>
 
-                        {/* Right Column (Juniors) */}
                         <div className="absolute top-1/2 -right-10 md:-right-12 transform -translate-y-1/2 flex flex-col gap-8 md:gap-12">
                             {agents.slice(6, 9).map((agent) => (
                                 <AgentAvatar
@@ -253,25 +287,26 @@ export default function MeetingRoom() {
                                     isSpeaking={speakingAgentId === agent.id}
                                     isSelected={targetAgent?.id === agent.id}
                                     onClick={() => handleAgentClick(agent)}
+                                    discussion={discussion}
                                 />
                             ))}
                         </div>
                     </div>
                 </div>
 
-                {/* Right Panel: Minutes / Chat Log */}
+                {/* Right Panel: Chat Log */}
                 <div className={cn(
                     "bg-white border-l border-slate-200 flex flex-col shadow-lg z-20",
-                    // Desktop: always show as 1/3
                     "hidden md:flex md:w-1/3",
-                    // Mobile: show only when chat view is active
                     mobileView === 'chat' ? "flex w-full" : ""
                 )}>
                     <div className="p-3 md:p-4 bg-slate-50 border-b border-slate-100 font-semibold text-slate-700 flex items-center gap-2 text-sm md:text-base">
                         <span>Meeting Log</span>
-                        {isProcessing && (
+                        {isBusy && (
                             <span className="text-xs text-blue-500 font-normal animate-pulse">
-                                진행 중...
+                                {discussion.status === 'in_progress'
+                                    ? `토론 진행 중 (${discussion.currentSpeakerIndex + 1}/${discussion.speakerOrder.length})`
+                                    : '진행 중...'}
                             </span>
                         )}
                     </div>
@@ -280,12 +315,13 @@ export default function MeetingRoom() {
                         {messages.length === 0 && (
                             <div className="text-center text-slate-400 mt-10 text-sm px-4">
                                 회의를 시작하려면 안건을 말씀해주세요.<br />
-                                에이전트를 클릭하면 지정 질문할 수 있습니다.
+                                에이전트를 클릭하면 지정 질문할 수 있습니다.<br />
+                                <span className="text-slate-500 font-medium">토론 모드</span>를 켜면 전원이 안건에 대해 발언합니다.
                             </div>
                         )}
                         <AnimatePresence initial={false}>
                             {messages.map((msg) => {
-                                const agent = agents.find(a => a.id === msg.senderId);
+                                const agent = agents.find((a) => a.id === msg.senderId);
                                 const isUser = msg.senderId === 'user';
                                 const isSystem = msg.senderId === 'system';
 
@@ -302,7 +338,6 @@ export default function MeetingRoom() {
                                                     "self-start items-start"
                                         )}
                                     >
-                                        {/* Sender label */}
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={cn(
                                                 "text-xs font-bold px-2 py-0.5 rounded",
@@ -316,16 +351,20 @@ export default function MeetingRoom() {
                                                     isSystem ? 'System' :
                                                         `${agent?.name} ${agent?.rank}`}
                                             </span>
+                                            {msg.stance && (
+                                                <StanceBadge stance={msg.stance} />
+                                            )}
                                         </div>
 
-                                        {/* Message bubble */}
                                         <div className={cn(
                                             "px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm",
                                             isUser
                                                 ? "bg-slate-800 text-white rounded-tr-none"
                                                 : isSystem
                                                     ? "bg-amber-50 border border-amber-200 text-amber-800 rounded-lg flex items-start gap-2"
-                                                    : "bg-white border border-slate-200 text-slate-700 rounded-tl-none"
+                                                    : msg.stance
+                                                        ? cn("border rounded-tl-none", STANCE_CONFIG[msg.stance].bg, STANCE_CONFIG[msg.stance].border, STANCE_CONFIG[msg.stance].color)
+                                                        : "bg-white border border-slate-200 text-slate-700 rounded-tl-none"
                                         )}>
                                             {isSystem && <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
                                             <span>{msg.content}</span>
@@ -335,11 +374,10 @@ export default function MeetingRoom() {
                             })}
                         </AnimatePresence>
 
-                        {/* Typing indicator */}
                         <AnimatePresence>
                             {speakingAgentId && (
                                 <TypingIndicator
-                                    agentName={agents.find(a => a.id === speakingAgentId)?.name}
+                                    agentName={agents.find((a) => a.id === speakingAgentId)?.name}
                                 />
                             )}
                         </AnimatePresence>
@@ -349,9 +387,8 @@ export default function MeetingRoom() {
 
                     {/* Input Area */}
                     <div className="p-3 md:p-4 bg-white border-t border-slate-200">
-                        {/* Target agent badge */}
                         <AnimatePresence>
-                            {targetAgent && (
+                            {targetAgent && !isDiscussMode && (
                                 <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
@@ -373,19 +410,56 @@ export default function MeetingRoom() {
                             )}
                         </AnimatePresence>
 
+                        <div className="flex items-center gap-2 mb-2">
+                            <button
+                                onClick={() => {
+                                    if (!isBusy) {
+                                        setIsDiscussMode((prev) => !prev);
+                                        setTargetAgent(null);
+                                    }
+                                }}
+                                disabled={isBusy}
+                                className={cn(
+                                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border",
+                                    isDiscussMode
+                                        ? "bg-violet-100 border-violet-300 text-violet-700"
+                                        : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100",
+                                    isBusy && "opacity-50 cursor-not-allowed"
+                                )}
+                            >
+                                <Swords className="w-3.5 h-3.5" />
+                                <span>토론 모드</span>
+                            </button>
+
+                            {discussion.status === 'in_progress' && (
+                                <button
+                                    onClick={handleCancelDiscussion}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors"
+                                >
+                                    <Square className="w-3 h-3" />
+                                    <span>중단</span>
+                                </button>
+                            )}
+                        </div>
+
                         <div className="relative">
                             <textarea
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 placeholder={inputPlaceholder}
-                                disabled={isProcessing}
+                                disabled={isBusy}
                                 className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-400 resize-none h-20 md:h-24 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={!input.trim() || isProcessing}
-                                className="absolute right-3 bottom-3 p-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                disabled={!input.trim() || isBusy}
+                                className={cn(
+                                    "absolute right-3 bottom-3 p-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors",
+                                    isDiscussMode
+                                        ? "bg-violet-600 hover:bg-violet-500"
+                                        : "bg-slate-900 hover:bg-slate-800"
+                                )}
                             >
                                 <Send className="w-4 h-4" />
                             </button>
@@ -402,20 +476,38 @@ export default function MeetingRoom() {
 
 /* ─── Sub-Components ──────────────────────────────────────────── */
 
+function StanceBadge({ stance }: { stance: AgentStance }) {
+    const config = STANCE_CONFIG[stance];
+    return (
+        <span className={cn(
+            "text-[10px] font-bold px-1.5 py-0.5 rounded border",
+            config.bg, config.border, config.color
+        )}>
+            {config.label}
+        </span>
+    );
+}
+
 interface AgentAvatarProps {
     agent: EmployeeAgent;
     position: 'top' | 'left' | 'right';
     isSpeaking: boolean;
     isSelected: boolean;
     onClick: () => void;
+    discussion: DiscussionState;
 }
 
-function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick }: AgentAvatarProps) {
+function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick, discussion }: AgentAvatarProps) {
     const labelClass = position === 'top'
         ? 'top-full mt-2'
         : position === 'left'
             ? 'left-full ml-3'
             : 'right-full mr-3';
+
+    const agentStance = discussion.stances[agent.id];
+    const isInDiscussion = discussion.status !== 'idle';
+    const hasSpoken = agentStance !== undefined;
+    const isWaiting = isInDiscussion && !hasSpoken && !isSpeaking;
 
     return (
         <div
@@ -427,18 +519,37 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick }: Agent
             aria-label={`${agent.name} ${agent.rank} 선택`}
         >
             <motion.div
-                animate={isSpeaking ? { scale: [1, 1.08, 1] } : { scale: 1 }}
-                transition={isSpeaking ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+                animate={
+                    isSpeaking
+                        ? { scale: [1, 1.08, 1] }
+                        : isWaiting
+                            ? { opacity: [1, 0.5, 1] }
+                            : { scale: 1 }
+                }
+                transition={
+                    isSpeaking
+                        ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' }
+                        : isWaiting
+                            ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                            : { duration: 0.2 }
+                }
                 className={cn(
                     "w-14 h-14 md:w-20 md:h-20 rounded-full border-4 shadow-md flex items-center justify-center transition-all cursor-pointer bg-white",
-                    // Speaking glow
                     isSpeaking
                         ? "border-blue-400 ring-4 ring-blue-400/30"
                         : isSelected
                             ? "border-emerald-400 ring-4 ring-emerald-400/30"
-                            : agent.rank.includes('Chairman') || agent.rank.includes('Managing')
-                                ? 'border-slate-300 hover:border-slate-400'
-                                : 'border-slate-100 hover:border-slate-300'
+                            : agentStance === 'agree'
+                                ? "border-emerald-300 ring-2 ring-emerald-200/40"
+                                : agentStance === 'disagree'
+                                    ? "border-rose-300 ring-2 ring-rose-200/40"
+                                    : agentStance === 'cautious'
+                                        ? "border-amber-300 ring-2 ring-amber-200/40"
+                                        : agentStance === 'neutral'
+                                            ? "border-slate-300 ring-2 ring-slate-200/40"
+                                            : agent.rank.includes('Chairman') || agent.rank.includes('Managing')
+                                                ? 'border-slate-300 hover:border-slate-400'
+                                                : 'border-slate-100 hover:border-slate-300'
                 )}
             >
                 <div className={cn(
@@ -449,7 +560,6 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick }: Agent
                 </div>
             </motion.div>
 
-            {/* Name Tag */}
             <div className={cn(
                 "absolute whitespace-nowrap bg-white px-2 md:px-3 py-0.5 md:py-1 rounded-md shadow-sm border border-slate-100 flex flex-col items-center z-10",
                 position === 'left' || position === 'right' ? 'top-1/2 -translate-y-1/2' : '',
@@ -461,7 +571,6 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick }: Agent
                 <span className="text-[9px] md:text-[10px] text-slate-400">{agent.role}</span>
             </div>
 
-            {/* Selection indicator */}
             {isSelected && (
                 <motion.div
                     initial={{ scale: 0 }}
@@ -473,7 +582,108 @@ function AgentAvatar({ agent, position, isSpeaking, isSelected, onClick }: Agent
                     </svg>
                 </motion.div>
             )}
+
+            {/* Stance indicator during discussion */}
+            <AnimatePresence>
+                {agentStance && (
+                    <motion.div
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        className={cn(
+                            "absolute -bottom-1 -right-1 w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center text-[10px] font-bold z-20 shadow-md border-2 border-white",
+                            agentStance === 'agree' && "bg-emerald-500 text-white",
+                            agentStance === 'disagree' && "bg-rose-500 text-white",
+                            agentStance === 'neutral' && "bg-slate-400 text-white",
+                            agentStance === 'cautious' && "bg-amber-500 text-white",
+                        )}
+                    >
+                        {agentStance === 'agree' && 'O'}
+                        {agentStance === 'disagree' && 'X'}
+                        {agentStance === 'neutral' && '-'}
+                        {agentStance === 'cautious' && '!'}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
+    );
+}
+
+function DiscussionProgress({ discussion }: { discussion: DiscussionState }) {
+    const total = discussion.speakerOrder.length;
+    const current = discussion.currentSpeakerIndex + 1;
+    const progress = (current / total) * 100;
+    const currentAgent = agents.find((a) => a.id === discussion.speakerOrder[discussion.currentSpeakerIndex]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-violet-200 px-5 py-3 max-w-md w-[90%]"
+        >
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-violet-700 flex items-center gap-1.5">
+                    <Swords className="w-3.5 h-3.5" />
+                    토론 진행 중
+                </span>
+                <span className="text-xs text-slate-500">{current} / {total}</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
+                <motion.div
+                    className="bg-violet-500 h-1.5 rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
+            </div>
+            <div className="text-[11px] text-slate-500 truncate">
+                안건: {discussion.topic}
+            </div>
+            {currentAgent && (
+                <div className="text-[11px] text-violet-600 font-medium mt-0.5">
+                    발언자: {currentAgent.name} {currentAgent.rank}
+                </div>
+            )}
+        </motion.div>
+    );
+}
+
+function DiscussionStanceSummary({ discussion }: { discussion: DiscussionState }) {
+    const stanceEntries = Object.entries(discussion.stances);
+    const counts = { agree: 0, disagree: 0, neutral: 0, cautious: 0 };
+    stanceEntries.forEach(([, stance]) => { counts[stance]++; });
+    const total = stanceEntries.length;
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200 px-5 py-3 max-w-sm w-[90%]"
+        >
+            <div className="text-xs font-bold text-slate-700 mb-2">토론 결과</div>
+            <div className="text-[11px] text-slate-500 truncate mb-3">
+                안건: {discussion.topic}
+            </div>
+            <div className="flex gap-2">
+                {(Object.entries(counts) as [AgentStance, number][])
+                    .filter(([, count]) => count > 0)
+                    .map(([stance, count]) => {
+                        const config = STANCE_CONFIG[stance];
+                        const pct = Math.round((count / total) * 100);
+                        return (
+                            <div key={stance} className={cn(
+                                "flex-1 rounded-lg border px-2 py-1.5 text-center",
+                                config.bg, config.border
+                            )}>
+                                <div className={cn("text-sm font-bold", config.color)}>{count}</div>
+                                <div className={cn("text-[10px] font-medium", config.color)}>{config.label} ({pct}%)</div>
+                            </div>
+                        );
+                    })}
+            </div>
+        </motion.div>
     );
 }
 
