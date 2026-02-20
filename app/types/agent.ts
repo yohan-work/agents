@@ -50,3 +50,39 @@ export const RANK_ORDER: Rank[] = [
   'Assistant Manager',
   'Junior Staff',
 ];
+
+export type DebatePhase =
+  | 'idle'
+  | 'select_agents'
+  | 'select_options'
+  | 'in_progress'
+  | 'judging'
+  | 'result';
+
+export type DebateTurn = 'attacker' | 'defender';
+
+export interface DebateRound {
+  roundNumber: number;
+  attackerContent: string;
+  defenderContent: string;
+}
+
+export interface JudgeVerdict {
+  agentId: string;
+  winner: DebateTurn;
+  reason: string;
+}
+
+export interface DebateArenaState {
+  phase: DebatePhase;
+  attacker: EmployeeAgent | null;
+  defender: EmployeeAgent | null;
+  topic: string;
+  totalRounds: number;
+  currentRound: number;
+  currentTurn: DebateTurn;
+  rounds: DebateRound[];
+  streamingContent: string;
+  verdicts: JudgeVerdict[];
+  winnerId: string | null;
+}
