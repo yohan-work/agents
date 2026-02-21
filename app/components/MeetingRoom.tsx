@@ -12,6 +12,7 @@ import AgentProfileCard from './AgentProfileCard';
 import ConnectionLines from './ConnectionLine';
 import DiscussionSummary from './DiscussionSummary';
 import DebateArena from './DebateArena';
+import TugOfWar from './TugOfWar';
 import {
     Send,
     User,
@@ -304,6 +305,16 @@ export default function MeetingRoom() {
                                 onSetRounds={setTotalRounds}
                                 onStartDebate={startDebate}
                                 onCancel={cancelDebate}
+                            />
+                        )}
+                    </AnimatePresence>
+
+                    {/* Tug of War overlay */}
+                    <AnimatePresence>
+                        {(discussion.status === 'in_progress' || discussion.status === 'completed') && !isArenaActive && (
+                            <TugOfWar
+                                stances={discussion.stances}
+                                isActive={discussion.status === 'in_progress'}
                             />
                         )}
                     </AnimatePresence>
