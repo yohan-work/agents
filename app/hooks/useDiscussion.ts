@@ -16,13 +16,36 @@ function parseStanceFromContent(content: string): { stance: AgentStance; cleanCo
         '반대': 'disagree',
         '중립': 'neutral',
         '신중': 'cautious',
+        '유보': 'cautious',
     };
 
-    const match = content.match(/\[STANCE:(찬성|반대|중립|신중)\]/);
-    if (match) {
-        const stance = stanceMap[match[1]] ?? 'neutral';
-        const cleanContent = content.replace(/\[STANCE:(찬성|반대|중립|신중)\]\s*/g, '').trim();
-        return { stance, cleanContent };
+    const patterns = [
+        /\[STANCE:\s*(찬성|반대|중립|신중|유보)\s*\]/i,
+        /\*?\*?\[?\s*STANCE\s*:\s*(찬성|반대|중립|신중|유보)\s*\]?\*?\*?/i,
+        /^\s*\*?\*?\s*\(?\s*(찬성|반대|중립|신중)\s*\)?\s*\*?\*?/m,
+        /입장\s*[:：]\s*(찬성|반대|중립|신중)/,
+    ];
+
+    for (const pattern of patterns) {
+        const match = content.match(pattern);
+        if (match) {
+            const stance = stanceMap[match[1]] ?? 'neutral';
+            const cleanContent = content.replace(match[0], '').trim();
+            return { stance, cleanContent };
+        }
+    }
+
+    const keywordPatterns: Array<{ pattern: RegExp; stance: AgentStance }> = [
+        { pattern: /적극\s*(찬성|동의|지지)|전적으로\s*동의|강력히\s*찬성/, stance: 'agree' },
+        { pattern: /찬성합니다|동의합니다|지지합니다|좋은\s*방향/, stance: 'agree' },
+        { pattern: /반대합니다|반대\s*입장|동의할\s*수\s*없|반대하|부정적/, stance: 'disagree' },
+        { pattern: /신중하게|신중히|우려|리스크|검토가\s*필요|재고/, stance: 'cautious' },
+    ];
+
+    for (const { pattern, stance } of keywordPatterns) {
+        if (pattern.test(content)) {
+            return { stance, cleanContent: content.trim() };
+        }
     }
 
     return { stance: 'neutral', cleanContent: content.trim() };
