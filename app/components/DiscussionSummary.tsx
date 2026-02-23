@@ -6,6 +6,7 @@ import { agents } from '@/app/data/agents';
 import { ChatMessage, AgentStance, DiscussionState } from '@/app/types/agent';
 import { cn } from '@/app/lib/utils';
 import { X, Swords } from 'lucide-react';
+import AgentCharacter from './AgentCharacter';
 
 const STANCE_CONFIG: Record<AgentStance, { label: string; color: string; bg: string; border: string; barColor: string; dotColor: string }> = {
     agree: { label: '찬성', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', barColor: 'bg-emerald-500', dotColor: 'bg-emerald-500' },
@@ -160,12 +161,11 @@ export default function DiscussionSummary({ discussion, messages, onClose }: Dis
                                             config.bg, config.border
                                         )}
                                     >
-                                        <div className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold",
-                                            agent.avatarColor
-                                        )}>
-                                            {agent.name.slice(0, 1)}
-                                        </div>
+                                        <AgentCharacter
+                                            agentId={agentId}
+                                            size={32}
+                                            state={stance === 'agree' ? 'agree' : stance === 'disagree' ? 'disagree' : 'idle'}
+                                        />
                                         <div className="text-[10px] font-bold text-slate-700 text-center leading-tight">
                                             {agent.name}
                                         </div>

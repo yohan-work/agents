@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { agents } from '@/app/data/agents';
 import { AgentStance } from '@/app/types/agent';
 import { cn } from '@/app/lib/utils';
+import { AgentCharacterMini } from './AgentCharacter';
 
 const STANCE_WEIGHT: Record<AgentStance, number> = {
     agree: 1.0,
@@ -215,11 +216,14 @@ function AgentMiniAvatar({ agentId, stance }: { agentId: string; stance: AgentSt
             className="group relative"
         >
             <div className={cn(
-                "w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold ring-2",
-                agent.avatarColor,
+                "w-7 h-7 rounded-full ring-2 overflow-hidden",
                 MINI_AVATAR_BORDER[stance]
             )}>
-                {agent.name.slice(0, 1)}
+                <AgentCharacterMini
+                    agentId={agentId}
+                    size={28}
+                    state={stance === 'agree' ? 'agree' : stance === 'disagree' ? 'disagree' : 'idle'}
+                />
             </div>
             <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-medium text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 {agent.name}

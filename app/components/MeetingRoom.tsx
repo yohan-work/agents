@@ -10,9 +10,11 @@ import { cn } from '@/app/lib/utils';
 import SpeechBubble from './SpeechBubble';
 import AgentProfileCard from './AgentProfileCard';
 import ConnectionLines from './ConnectionLine';
-import DiscussionSummary from './DiscussionSummary';
 import DebateArena from './DebateArena';
 import TugOfWar from './TugOfWar';
+import DiscussionRaceTrack from './DiscussionRaceTrack';
+import AgentCharacter from './AgentCharacter';
+import { CharacterState } from '@/app/types/agent';
 import {
     Send,
     User,
@@ -279,16 +281,13 @@ export default function MeetingRoom() {
                     "hidden md:flex md:w-2/3",
                     mobileView === 'boardroom' ? "flex w-full" : ""
                 )}>
-                    {/* Discussion progress / summary overlay */}
+                    {/* Discussion race track / summary overlay */}
                     <AnimatePresence>
-                        {discussion.status === 'in_progress' && (
-                            <DiscussionProgress discussion={discussion} />
-                        )}
-                        {discussion.status === 'completed' && showSummary && (
-                            <DiscussionSummary
+                        {(discussion.status === 'in_progress' || (discussion.status === 'completed' && showSummary)) && !isArenaActive && (
+                            <DiscussionRaceTrack
                                 discussion={discussion}
                                 messages={messages}
-                                onClose={() => setShowSummary(false)}
+                                onClose={discussion.status === 'completed' ? () => setShowSummary(false) : undefined}
                             />
                         )}
                     </AnimatePresence>
@@ -644,18 +643,14 @@ function AgentAvatar({
         >
             <motion.div
                 animate={
-                    isSpeaking
-                        ? { scale: [1, 1.08, 1] }
-                        : isWaiting
-                            ? { opacity: [1, 0.5, 1] }
-                            : { scale: 1 }
+                    isWaiting
+                        ? { opacity: [1, 0.5, 1] }
+                        : { scale: 1 }
                 }
                 transition={
-                    isSpeaking
-                        ? { duration: 1.2, repeat: Infinity, ease: 'easeInOut' }
-                        : isWaiting
-                            ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
-                            : { duration: 0.2 }
+                    isWaiting
+                        ? { duration: 2, repeat: Infinity, ease: 'easeInOut' }
+                        : { duration: 0.2 }
                 }
                 className={cn(
                     "w-14 h-14 md:w-20 md:h-20 rounded-full border-4 shadow-md flex items-center justify-center transition-all cursor-pointer bg-white",
@@ -676,12 +671,17 @@ function AgentAvatar({
                                                 : 'border-slate-100 hover:border-slate-300'
                 )}
             >
-                <div className={cn(
-                    "w-full h-full rounded-full flex items-center justify-center text-white font-bold text-sm md:text-lg opacity-90",
-                    agent.avatarColor
-                )}>
-                    {agent.name.slice(0, 1)}
-                </div>
+                <AgentCharacter
+                    agentId={agent.id}
+                    state={
+                        isSpeaking ? 'speaking' as CharacterState
+                        : agentStance === 'agree' ? 'agree' as CharacterState
+                        : agentStance === 'disagree' ? 'disagree' as CharacterState
+                        : agentStance === 'cautious' ? 'cautious' as CharacterState
+                        : 'idle' as CharacterState
+                    }
+                    size={56}
+                />
             </motion.div>
 
             {/* Name Tag */}
@@ -756,46 +756,6 @@ function AgentAvatar({
                 )}
             </AnimatePresence>
         </div>
-    );
-}
-
-function DiscussionProgress({ discussion }: { discussion: DiscussionState }) {
-    const total = discussion.speakerOrder.length;
-    const current = discussion.currentSpeakerIndex + 1;
-    const progress = (current / total) * 100;
-    const currentAgent = agents.find((a) => a.id === discussion.speakerOrder[discussion.currentSpeakerIndex]);
-
-    return (
-        <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-violet-200 px-5 py-3 max-w-md w-[90%]"
-        >
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-violet-700 flex items-center gap-1.5">
-                    <Swords className="w-3.5 h-3.5" />
-                    토론 진행 중
-                </span>
-                <span className="text-xs text-slate-500">{current} / {total}</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-1.5 mb-2">
-                <motion.div
-                    className="bg-violet-500 h-1.5 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.5, ease: 'easeOut' }}
-                />
-            </div>
-            <div className="text-[11px] text-slate-500 truncate">
-                안건: {discussion.topic}
-            </div>
-            {currentAgent && (
-                <div className="text-[11px] text-violet-600 font-medium mt-0.5">
-                    발언자: {currentAgent.name} {currentAgent.rank}
-                </div>
-            )}
-        </motion.div>
     );
 }
 

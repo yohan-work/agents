@@ -6,6 +6,7 @@ import { agents } from '@/app/data/agents';
 import { EmployeeAgent, DebateArenaState, DebateRound } from '@/app/types/agent';
 import { cn } from '@/app/lib/utils';
 import { X, Zap, Trophy, ChevronRight, Swords } from 'lucide-react';
+import AgentCharacter, { AgentCharacterMini } from './AgentCharacter';
 
 interface DebateArenaProps {
     arena: DebateArenaState;
@@ -131,11 +132,8 @@ function AgentSelectPhase({
                                     : "border-slate-700 bg-slate-800/60 hover:border-slate-500 hover:bg-slate-800"
                             )}
                         >
-                            <div className={cn(
-                                "w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center text-white font-bold text-lg",
-                                agent.avatarColor
-                            )}>
-                                {agent.name.slice(0, 1)}
+                            <div className="mx-auto mb-2 flex items-center justify-center">
+                                <AgentCharacter agentId={agent.id} size={48} state="idle" />
                             </div>
                             <div className="text-xs font-bold text-white text-center">{agent.name}</div>
                             <div className="text-[10px] text-slate-400 text-center">{agent.role}</div>
@@ -205,12 +203,7 @@ function SelectedSlot({
                     >
                         <X className="w-2.5 h-2.5 text-white" />
                     </button>
-                    <div className={cn(
-                        "w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-xl",
-                        agent.avatarColor
-                    )}>
-                        {agent.name.slice(0, 1)}
-                    </div>
+                    <AgentCharacter agentId={agent.id} size={56} state="idle" />
                     <span className="text-xs font-bold text-white">{agent.name}</span>
                     <span className={cn("text-[10px] font-bold", textColor)}>{label}</span>
                 </motion.div>
@@ -253,21 +246,15 @@ function OptionsPhase({
             >
                 <div className="flex items-center justify-center gap-6 mb-4">
                     <div className="flex flex-col items-center">
-                        <div className={cn(
-                            "w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl border-2 border-red-500/50",
-                            arena.attacker?.avatarColor
-                        )}>
-                            {arena.attacker?.name.slice(0, 1)}
+                        <div className="rounded-full border-2 border-red-500/50 overflow-hidden">
+                            {arena.attacker && <AgentCharacter agentId={arena.attacker.id} size={64} state="idle" />}
                         </div>
                         <span className="text-xs font-bold text-red-400 mt-1">{arena.attacker?.name}</span>
                     </div>
                     <div className="text-2xl font-black text-slate-500">VS</div>
                     <div className="flex flex-col items-center">
-                        <div className={cn(
-                            "w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl border-2 border-blue-500/50",
-                            arena.defender?.avatarColor
-                        )}>
-                            {arena.defender?.name.slice(0, 1)}
+                        <div className="rounded-full border-2 border-blue-500/50 overflow-hidden">
+                            {arena.defender && <AgentCharacter agentId={arena.defender.id} size={64} state="idle" />}
                         </div>
                         <span className="text-xs font-bold text-blue-400 mt-1">{arena.defender?.name}</span>
                     </div>
@@ -403,12 +390,7 @@ function BattlePhase({
                             )}
                         >
                             <div className="flex items-center gap-2 mb-2">
-                                <div className={cn(
-                                    "w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold",
-                                    currentAgent.avatarColor
-                                )}>
-                                    {currentAgent.name.slice(0, 1)}
-                                </div>
+                                <AgentCharacterMini agentId={currentAgent.id} size={24} state="speaking" />
                                 <span className="text-xs font-bold text-white">{currentAgent.name}</span>
                                 <span className={cn(
                                     "text-[10px] font-bold px-2 py-0.5 rounded-full",
@@ -478,12 +460,7 @@ function BattlePhase({
                             key={judge.id}
                             className="flex flex-col items-center opacity-40"
                         >
-                            <div className={cn(
-                                "w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold",
-                                judge.avatarColor
-                            )}>
-                                {judge.name.slice(0, 1)}
-                            </div>
+                            <AgentCharacterMini agentId={judge.id} size={32} />
                             <span className="text-[9px] text-slate-500 mt-0.5">{judge.name}</span>
                         </div>
                     ))}
@@ -516,11 +493,11 @@ function FighterCard({
                 animate={isActive ? { scale: [1, 1.05, 1] } : { scale: 1 }}
                 transition={isActive ? { duration: 1.5, repeat: Infinity } : {}}
                 className={cn(
-                    "w-16 h-16 rounded-full border-3 flex items-center justify-center text-white font-bold text-xl shrink-0",
-                    borderColor, glowClass, agent.avatarColor
+                    "w-16 h-16 rounded-full border-3 flex items-center justify-center shrink-0 overflow-hidden bg-slate-900",
+                    borderColor, glowClass
                 )}
             >
-                {agent.name.slice(0, 1)}
+                <AgentCharacter agentId={agent.id} size={56} state={isActive ? 'speaking' : 'idle'} />
             </motion.div>
             <div className={cn("flex-1 min-w-0", side === 'right' && "text-right")}>
                 <div className="text-xs font-bold text-white mb-0.5">{agent.name}</div>
@@ -557,18 +534,14 @@ function CompletedRound({
             </div>
             <div className="bg-red-950/20 border border-red-500/20 rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-1">
-                    <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold", attacker.avatarColor)}>
-                        {attacker.name.slice(0, 1)}
-                    </div>
+                    <AgentCharacterMini agentId={attacker.id} size={20} />
                     <span className="text-[10px] font-bold text-red-400">{attacker.name} - ATTACK</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{round.attackerContent}</p>
             </div>
             <div className="bg-blue-950/20 border border-blue-500/20 rounded-xl p-3">
                 <div className="flex items-center gap-2 mb-1">
-                    <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold", defender.avatarColor)}>
-                        {defender.name.slice(0, 1)}
-                    </div>
+                    <AgentCharacterMini agentId={defender.id} size={20} />
                     <span className="text-[10px] font-bold text-blue-400">{defender.name} - COUNTER</span>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{round.defenderContent}</p>
@@ -607,12 +580,7 @@ function JudgingPhase({ arena }: { arena: DebateArenaState }) {
                             transition={{ duration: 1.5, repeat: Infinity, delay: idx * 0.2 }}
                             className="flex flex-col items-center"
                         >
-                            <div className={cn(
-                                "w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold",
-                                judge.avatarColor
-                            )}>
-                                {judge.name.slice(0, 1)}
-                            </div>
+                            <AgentCharacter agentId={judge.id} size={40} state="idle" />
                             <span className="text-[9px] text-slate-500 mt-1">{judge.name}</span>
                         </motion.div>
                     ))}
@@ -757,12 +725,7 @@ function ResultPhase({
                                             : "bg-slate-800/50 border-slate-700/50"
                                     )}
                                 >
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0",
-                                        judge.avatarColor
-                                    )}>
-                                        {judge.name.slice(0, 1)}
-                                    </div>
+                                    <AgentCharacterMini agentId={judge.id} size={32} className="shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                             <span className="text-xs font-bold text-white">{judge.name}</span>
@@ -840,16 +803,16 @@ function ResultFighterCard({
                 animate={isWinner ? { scale: [1, 1.1, 1] } : {}}
                 transition={isWinner ? { duration: 1, repeat: Infinity } : {}}
                 className={cn(
-                    "w-16 h-16 rounded-full border-3 flex items-center justify-center text-white font-bold text-xl shrink-0",
-                    borderColor, agent.avatarColor
+                    "relative w-16 h-16 rounded-full border-3 flex items-center justify-center shrink-0 overflow-hidden bg-slate-900",
+                    borderColor
                 )}
             >
-                {agent.name.slice(0, 1)}
+                <AgentCharacter agentId={agent.id} size={56} state={isWinner ? 'agree' : 'idle'} />
                 {isWinner && (
                     <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="absolute -top-2 -right-2"
+                        className="absolute -top-2 -right-2 z-10"
                     >
                         <Trophy className="w-5 h-5 text-yellow-400" />
                     </motion.div>
@@ -912,11 +875,17 @@ function RoundReplay({
                                 >
                                     <div className="pt-2 space-y-2">
                                         <div className="bg-red-950/20 border border-red-500/20 rounded-lg p-2.5">
-                                            <div className="text-[10px] font-bold text-red-400 mb-1">{attacker.name} - ATTACK</div>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <AgentCharacterMini agentId={attacker.id} size={16} />
+                                                <span className="text-[10px] font-bold text-red-400">{attacker.name} - ATTACK</span>
+                                            </div>
                                             <p className="text-[11px] text-slate-400 leading-relaxed">{round.attackerContent}</p>
                                         </div>
                                         <div className="bg-blue-950/20 border border-blue-500/20 rounded-lg p-2.5">
-                                            <div className="text-[10px] font-bold text-blue-400 mb-1">{defender.name} - COUNTER</div>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <AgentCharacterMini agentId={defender.id} size={16} />
+                                                <span className="text-[10px] font-bold text-blue-400">{defender.name} - COUNTER</span>
+                                            </div>
                                             <p className="text-[11px] text-slate-400 leading-relaxed">{round.defenderContent}</p>
                                         </div>
                                     </div>

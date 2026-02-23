@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/app/lib/utils';
 import { EmployeeAgent, AgentStance } from '@/app/types/agent';
+import AgentCharacter from './AgentCharacter';
 
 const STANCE_LABEL: Record<AgentStance, { text: string; color: string }> = {
     agree: { text: '찬성', color: 'text-emerald-600' },
@@ -41,12 +42,11 @@ export default function AgentProfileCard({ agent, position, stance, latestMessag
 
                 <div className="p-3">
                     <div className="flex items-center gap-2 mb-2">
-                        <div className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm",
-                            agent.avatarColor
-                        )}>
-                            {agent.name.slice(0, 1)}
-                        </div>
+                        <AgentCharacter
+                            agentId={agent.id}
+                            size={32}
+                            state={stance === 'agree' ? 'agree' : stance === 'disagree' ? 'disagree' : 'idle'}
+                        />
                         <div>
                             <div className="text-sm font-bold text-slate-800">{agent.name}</div>
                             <div className="text-[10px] text-slate-400">{agent.rank}</div>
